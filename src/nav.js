@@ -1,10 +1,10 @@
-// Tracks SPA navigation and "opened from a DM" grants, then enforces rules.classify.
+// Tracks SPA navigation and "opened from a source page" grants, then enforces rules.classify.
 // State lives in sessionStorage, so it is per-tab and dies with the tab.
 (function (root) {
   const { rules } = root.MF;
-  const GRANT_KEY = 'mf:grant';     // { key, at } written on a click inside DMs
+  const GRANT_KEY = 'mf:grant';     // { key, at } written on a click on a source page
   const ALLOWED_KEY = 'mf:allowed'; // key of the content currently being viewed
-  const GRANT_WINDOW_MS = 3000;     // for DM cards that aren't plain <a href> links
+  const GRANT_WINDOW_MS = 3000;     // for DM cards etc. that aren't plain <a href> links
   const POLL_MS = 200;
 
   function read(k) {
@@ -33,15 +33,25 @@
   }
 
   function onClick(e) {
-    if (!rules.isMessagePage(new URL(location.href))) return;
+    if (!rules.isSourcePage(new URL(location.href))) return;
     const a = e.target.closest && e.target.closest('a[href]');
-    const key = a ? rules.contentKey(new URL(a.href, location.href)) : null;
-    write(GRANT_KEY, { key, at: Date.now() });
+    if (!a) {
+      // Not a link (e.g. a DM card): unlock whatever opens in the next few seconds.
+      write(GRANT_KEY, { key: null, at: Date.now() });
+      return;
+    }
+    // A link: unlock only that post or reel. A link elsewhere (Explore, a profile)
+    // clears any grant so it can't be carried onto the next page.
+    const key = rules.contentKey(new URL(a.href, location.href));
+    if (key) write(GRANT_KEY, { key, at: Date.now() });
+    else remove(GRANT_KEY);
   }
 
   function enforce(initialLoad) {
     const url = new URL(location.href);
     const key = rules.contentKey(url);
+    // Landing on Explore (or anywhere that isn't a source) drops an unused grant.
+    if (!key && !rules.isSourcePage(url)) remove(GRANT_KEY);
     const granted = key ? consumeGrant(key) : false;
     const verdict = rules.classify(url, {
       initialLoad,

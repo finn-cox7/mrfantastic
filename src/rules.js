@@ -18,9 +18,25 @@
     return IG_HOSTS.has(url.hostname);
   }
 
-  // Pages where clicking a link means "a friend sent me this".
-  function isMessagePage(url) {
-    return isInstagram(url) && url.pathname.startsWith('/direct/');
+  // First path segments that are Instagram pages, not usernames.
+  const IG_RESERVED = new Set([
+    'explore', 'p', 'reel', 'reels', 'tv', 'stories', 'direct', 'accounts',
+    'challenge', 'emails', 'session', 'two_factor', 'legal', 'privacy', 'about',
+    'api', 'oauth', 'web', 'notifications',
+  ]);
+  // /username/, /username/reels/, /username/tagged/, /username/saved/
+  const IG_PROFILE = /^\/([^/]+)\/(?:(?:reels|tagged|saved)\/)?$/;
+
+  function isProfilePage(url) {
+    const m = url.pathname.match(IG_PROFILE);
+    return !!m && !IG_RESERVED.has(m[1]);
+  }
+
+  // Pages that may open a post or reel: DMs, profiles and the home feed.
+  // Not Explore, and not another post (that's the arrow / swipe-to-next loop).
+  function isSourcePage(url) {
+    if (!isInstagram(url)) return false;
+    return url.pathname === '/' || url.pathname.startsWith('/direct/') || isProfilePage(url);
   }
 
   // Stable key for a single post or reel page, or null if the URL isn't one.
@@ -31,21 +47,23 @@
     return m ? 'ig:post:' + m[1] : null;
   }
 
-  // A full page load counts as "opened from a link" unless it came from
-  // elsewhere on Instagram (e.g. cmd-clicking a "more posts" grid).
+  // A full page load counts as "opened from a link" if it came from outside
+  // Instagram or from a source page (e.g. cmd-clicking a profile grid), but not
+  // from Explore or another post.
   function referrerIsTrusted(referrer) {
     if (!referrer) return true;
     let ref;
     try { ref = new URL(referrer); } catch { return true; }
     if (!isInstagram(ref)) return true;
-    return isMessagePage(ref);
+    return isSourcePage(ref);
   }
 
   // ctx: { initialLoad: bool, referrer: string, granted: bool }
-  //   granted = the user clicked this item in a DM (tracked by nav.js)
+  //   granted = the user clicked this item on a source page (tracked by nav.js)
   // returns { action: 'allow' } | { action: 'redirect', to }
   // Only the Reels tab and post/reel pages are gated; feed, stories, search,
-  // Explore, profiles and DMs are all allowed.
+  // Explore, profiles and DMs are all allowed. Post/reel pages need to be
+  // opened from a source page.
   function classify(url, ctx) {
     if (!isInstagram(url)) return { action: 'allow' };
 
@@ -60,5 +78,5 @@
     return { action: 'allow' };
   }
 
-  return { classify, contentKey, isMessagePage, referrerIsTrusted, IG_HOME };
+  return { classify, contentKey, isSourcePage, referrerIsTrusted, IG_HOME };
 });

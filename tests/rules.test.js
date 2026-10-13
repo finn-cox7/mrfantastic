@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { classify, contentKey, IG_HOME } = require('../src/rules.js');
+const { classify, contentKey, isSourcePage, IG_HOME } = require('../src/rules.js');
 
 const IG = 'https://www.instagram.com';
 const spa = { initialLoad: false, referrer: '', granted: false };
@@ -31,13 +31,13 @@ test('feed, stories, search, explore, profiles and DMs are allowed', () => {
   }
 });
 
-test('post and reel pages clicked in a DM are allowed', () => {
+test('post and reel pages clicked on a source page are allowed', () => {
   for (const p of ['/p/ABC/', '/reel/ABC/', '/reels/ABC/', '/tv/ABC/', '/user/p/ABC/', '/user/reel/ABC/']) {
     allowed(p, granted);
   }
 });
 
-test('in-app navigation to a post or reel without a DM click is blocked (feed click, swipe to next reel)', () => {
+test('in-app navigation to a post or reel without a source click is blocked (Explore, next-post arrows, swipe)', () => {
   for (const p of ['/p/ABC/', '/reel/XYZ/', '/reels/XYZ/']) blocked(p, spa);
 });
 
@@ -47,9 +47,25 @@ test('opening a link from outside Instagram is allowed', () => {
   allowed('/p/ABC/', load(IG + '/direct/t/123/'));
 });
 
-test('opening a post in a new tab from elsewhere on Instagram is blocked', () => {
-  blocked('/p/ABC/', load(IG + '/'));
-  blocked('/p/ABC/', load(IG + '/someuser/'));
+test('opening a post in a new tab: allowed from a source page, blocked from Explore or another post', () => {
+  allowed('/p/ABC/', load(IG + '/'));
+  allowed('/p/ABC/', load(IG + '/someuser/'));
+  allowed('/p/ABC/', load(IG + '/someuser/reels/'));
+  blocked('/p/ABC/', load(IG + '/explore/'));
+  blocked('/p/ABC/', load(IG + '/explore/tags/cats/'));
+  blocked('/p/ABC/', load(IG + '/p/PREV/'));
+  blocked('/p/ABC/', load(IG + '/someuser/p/PREV/'));
+});
+
+test('source pages are DMs, profiles and the home feed only', () => {
+  const src = (p) => isSourcePage(new URL(IG + p));
+  for (const p of ['/', '/direct/inbox/', '/direct/t/1/', '/someuser/', '/someuser/reels/', '/someuser/tagged/']) {
+    assert.ok(src(p), p);
+  }
+  for (const p of ['/explore/', '/explore/search/', '/reels/', '/p/ABC/', '/someuser/p/ABC/', '/reel/ABC/', '/stories/a/1/', '/accounts/edit/']) {
+    assert.ok(!src(p), p);
+  }
+  assert.ok(!isSourcePage(new URL('https://example.com/')));
 });
 
 test('contentKey ignores type, username prefix and query string', () => {
