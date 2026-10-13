@@ -6,9 +6,10 @@ Block feed-scrolling on Instagram, YouTube and Snapchat on both laptop and phone
 while still letting me open the individual posts, reels, stories and videos that
 friends send me.
 
-**Core rule:** content is allowed only if I reached it *from a message* (a DM or an
-external link). Anything the platform pushes at me — home feed, Explore, Reels tab,
-Shorts, Spotlight, recommendations, autoplay-next, swipe-to-next — is blocked.
+**Core rule:** short-video content (Reels, Shorts, Spotlight) and single post/reel pages
+are allowed only if I reached them *from a message* (a DM or an external link).
+Swipe-to-next and autoplay-next are blocked. On Instagram the regular feed, stories,
+search, Explore and profiles stay usable (changed after first real test).
 
 ## Hard constraints (these decide the architecture)
 
@@ -39,11 +40,13 @@ URL-based rules come first because URLs change far less often than CSS class nam
 DOM hiding is only for leftovers that a URL can't express (sidebars, "up next").
 
 ### Instagram (`instagram.com`)
-- Allow: `/direct/*` (DMs).
-- Allow only when opened from a DM: `/p/<id>`, `/reel/<id>`, `/stories/<user>/<id>`.
-- Redirect to `/direct/inbox/`: `/` (feed), `/explore/*`, `/reels/*`, a profile grid
-  (`/<user>/`), and story tray auto-advance into a story nobody sent me.
+- Allow: everything not listed below (feed, stories, search, Explore, profiles, DMs).
+- Redirect to `/`: the Reels tab (`/reels/`).
+- Allow only when opened from a DM or an outside link, else redirect to `/`:
+  `/p/<id>`, `/reel/<id>`, `/reels/<id>`, `/tv/<id>` (also with a `/<user>/` prefix).
 - Block navigating from one reel to another that wasn't sent (that's the scroll loop).
+- Hide reels mixed into the home feed (`article:has(a[href*="/reel/"])`, home page only)
+  and the Reels link in the sidebar.
 
 ### YouTube (`youtube.com`, `m.youtube.com`)
 - Allow `/watch?v=` and `/shorts/<id>` only when opened from an external link
