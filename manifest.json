@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "mrfantastic",
+  "version": "0.1.0",
+  "description": "See what friends send you without the feed.",
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*", "https://instagram.com/*"],
+      "js": ["src/rules.js", "src/nav.js", "src/instagram.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "browser_specific_settings": {
+    "gecko": { "id": "mrfantastic@local" }
+  }
+}

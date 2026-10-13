@@ -15,10 +15,21 @@ Shorts, Spotlight, recommendations, autoplay-next, swipe-to-next — is blocked.
 | Platform | What's possible | Consequence |
 |---|---|---|
 | Desktop browser | Content scripts can read the URL and the page and rewrite both | Full control. Build this first. |
-| Android | An AccessibilityService can see which screen another app is on and press Back | Full control over the native apps. Sideloaded APK, free. |
 | iOS | No app can inspect or alter another app. Screen Time can only block a whole app. | Native apps get blocked entirely; filtered use goes through Safari + our script. **Snapchat has no mobile web**, so on iPhone it is either blocked or time-limited, not filtered. |
 
 A blocker I write can also be turned off by me. Friction is part of the design (M4).
+
+## My devices: iPhone 15 Pro + M4 MacBook
+
+- **Mac:** the same code runs as a Chrome/Firefox extension (load unpacked) and as a
+  Safari userscript.
+- **iPhone:** Screen Time blocks the Instagram, YouTube and Snapchat apps (1-minute App
+  Limit, "Block at End of Limit", Screen Time passcode held by a friend). Instagram and
+  YouTube are used in Safari with the userscript instead.
+- **Safari on both:** the free **Userscripts** app (App Store / Mac App Store) runs
+  `dist/mrfantastic.user.js`. No Xcode, no $99/yr, nothing that expires every 7 days.
+- **Snapchat:** blocked on the iPhone (no mobile web exists); use it on the Mac at
+  web.snapchat.com. Check which browsers Snapchat web supports before M3.
 
 ## Rule engine (shared by every platform)
 
@@ -50,18 +61,14 @@ DOM hiding is only for leftovers that a URL can't express (sidebars, "up next").
 ## Repo layout
 
 ```
-extension/            Chrome MV3 (also loads in Firefox); plain JS, no build step
-  manifest.json
-  src/rules.js        classify(): pure, unit-tested
-  src/nav.js          SPA URL-change watcher + "opened from DM" token (sessionStorage)
-  src/instagram.js
-  src/youtube.js
-  src/snapchat.js
-  src/hide.css        injected at document_start so feeds never flash on screen
-  options.html/.js    toggles (YouTube search, profiles, etc.)
-tests/rules.test.js   Vitest: one case per URL rule above
-android/              (M5, if I use Android) Kotlin AccessibilityService app
-ios/                  (M5, if I use iPhone) Screen Time setup + Safari script
+manifest.json               MV3 extension (Chrome / Firefox); plain JS, no build step
+src/rules.js                classify(): pure, unit-tested
+src/nav.js                  SPA URL-change watcher + "opened from DM" grants (sessionStorage)
+src/instagram.js            entry point; injects CSS at document_start
+src/youtube.js              (M2)
+src/snapchat.js             (M3)
+scripts/build-userscript.js bundles src/ into dist/mrfantastic.user.js for Safari
+tests/rules.test.js         node:test, one case per URL rule (npm test)
 ```
 
 ### How "opened from a DM" works
@@ -70,23 +77,29 @@ ios/                  (M5, if I use iPhone) Screen Time setup + Safari script
 2. On any gated URL, the content script checks for a matching token. No token → redirect.
 3. The token is single-use, so swiping to the next reel produces a URL without a token,
    and that gets blocked.
-4. SPA route changes are caught by wrapping `history.pushState`/`replaceState`,
-   listening for `popstate`, and polling `location.href` every 250ms as a fallback.
+4. SPA route changes are caught by polling `location.href` every 200ms plus `popstate`.
+   (Content scripts run in an isolated world, so wrapping the page's `history.pushState` won't work.)
+5. A DM card that isn't a plain `<a href>` gives a 3-second grant for the next item opened.
+6. A full page load of a post is allowed (it came from a link, e.g. iMessage) unless the
+   referrer is a non-DM Instagram page, which is what cmd-click from a grid would produce.
 
 ## Milestones
+
+Status: **M1 built and unit-tested; not yet checked against live instagram.com.**
 
 | # | Deliverable | Done when |
 |---|---|---|
 | M1 | Extension skeleton + `rules.js` + tests + Instagram | Feed, Explore and Reels redirect to DMs; a reel sent in a DM plays; swiping past it is blocked |
 | M2 | YouTube | Home/Shorts blocked; a link a friend sent plays with no sidebar or autoplay |
 | M3 | Snapchat web | Chats work; Spotlight and Discover are gone |
-| M4 | Friction | Disabling the extension or changing options needs a 60s wait + typed phrase; uninstall protection via a Chrome policy/managed profile where available |
-| M5 | Phone | Android: AccessibilityService app that applies the same rules to the native apps. iPhone: Screen Time blocks the 3 apps (passcode held by a friend), and Safari runs `rules.js` through a userscript extension |
+| M4 | Friction | Disabling the extension or changing options needs a 60s wait + typed phrase |
+| M5 | iPhone | Screen Time blocks the 3 apps; the userscript works in iPhone Safari on IG + YouTube |
 
-M1–M4 are the same no matter which phone I have. M5 depends on the phone OS.
+**Known gap:** on the iPhone, nothing stops me from switching the script off in the
+Userscripts app. Screen Time can't lock that, so the friend-held passcode only protects the app block.
 
 ## Risks
 - **Site redesigns break DOM selectors.** Keep selectors minimal and push logic into URL rules.
 - **Instagram mobile web DMs (iPhone path)**: check they still work in Safari before building M5-iOS.
-- **The iOS Safari Web Extension route** needs a Mac + Xcode. A free Apple ID signature expires
-  every 7 days; avoiding that costs $99/yr. The userscript-app route avoids both.
+- **Native Safari Web Extension** (rejected): needs Xcode, and a free Apple ID signature
+  expires every 7 days unless I pay $99/yr. The Userscripts route avoids both.
