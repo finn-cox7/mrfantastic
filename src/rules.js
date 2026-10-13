@@ -32,11 +32,11 @@
     return !!m && !IG_RESERVED.has(m[1]);
   }
 
-  // Pages that may open a post or reel: DMs, profiles and the home feed.
-  // Not Explore, and not another post (that's the arrow / swipe-to-next loop).
+  // Pages that may open a post or reel: DMs and profiles.
+  // Not the home feed or Explore, and not another post (the arrow / swipe-to-next loop).
   function isSourcePage(url) {
     if (!isInstagram(url)) return false;
-    return url.pathname === '/' || url.pathname.startsWith('/direct/') || isProfilePage(url);
+    return url.pathname.startsWith('/direct/') || isProfilePage(url);
   }
 
   // Stable key for a single post or reel page, or null if the URL isn't one.
@@ -61,9 +61,10 @@
   // ctx: { initialLoad: bool, referrer: string, granted: bool }
   //   granted = the user clicked this item on a source page (tracked by nav.js)
   // returns { action: 'allow' } | { action: 'redirect', to }
-  // Only the Reels tab and post/reel pages are gated; feed, stories, search,
-  // Explore, profiles and DMs are all allowed. Post/reel pages need to be
-  // opened from a source page.
+  // Only the Reels tab and post/reel pages are gated by URL; stories, search,
+  // Explore, profiles and DMs are allowed. Post/reel pages need to be opened
+  // from a source page. The home feed's posts are hidden by instagram.js so the
+  // story tray above them stays usable.
   function classify(url, ctx) {
     if (!isInstagram(url)) return { action: 'allow' };
 

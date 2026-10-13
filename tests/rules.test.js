@@ -47,8 +47,8 @@ test('opening a link from outside Instagram is allowed', () => {
   allowed('/p/ABC/', load(IG + '/direct/t/123/'));
 });
 
-test('opening a post in a new tab: allowed from a source page, blocked from Explore or another post', () => {
-  allowed('/p/ABC/', load(IG + '/'));
+test('opening a post in a new tab: allowed from a source page, blocked from feed, Explore or another post', () => {
+  blocked('/p/ABC/', load(IG + '/'));
   allowed('/p/ABC/', load(IG + '/someuser/'));
   allowed('/p/ABC/', load(IG + '/someuser/reels/'));
   blocked('/p/ABC/', load(IG + '/explore/'));
@@ -57,12 +57,12 @@ test('opening a post in a new tab: allowed from a source page, blocked from Expl
   blocked('/p/ABC/', load(IG + '/someuser/p/PREV/'));
 });
 
-test('source pages are DMs, profiles and the home feed only', () => {
+test('source pages are DMs and profiles only', () => {
   const src = (p) => isSourcePage(new URL(IG + p));
-  for (const p of ['/', '/direct/inbox/', '/direct/t/1/', '/someuser/', '/someuser/reels/', '/someuser/tagged/']) {
+  for (const p of ['/direct/inbox/', '/direct/t/1/', '/someuser/', '/someuser/reels/', '/someuser/tagged/']) {
     assert.ok(src(p), p);
   }
-  for (const p of ['/explore/', '/explore/search/', '/reels/', '/p/ABC/', '/someuser/p/ABC/', '/reel/ABC/', '/stories/a/1/', '/accounts/edit/']) {
+  for (const p of ['/', '/?variant=following', '/explore/', '/explore/search/', '/reels/', '/p/ABC/', '/someuser/p/ABC/', '/reel/ABC/', '/stories/a/1/', '/accounts/edit/']) {
     assert.ok(!src(p), p);
   }
   assert.ok(!isSourcePage(new URL('https://example.com/')));

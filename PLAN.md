@@ -8,9 +8,9 @@ friends send me.
 
 **Core rule:** short-video content (Reels, Shorts, Spotlight) and single post/reel pages
 are allowed only if I reached them from a *source*: a DM, an external link, and on
-Instagram also a profile or the home feed. Never from Explore or from another post.
-Swipe-to-next and autoplay-next are blocked. On Instagram the regular feed, stories,
-search, Explore and profiles stay usable (changed after first real test).
+Instagram also a profile. Never from the feed, Explore or another post.
+Swipe-to-next and autoplay-next are blocked. On Instagram the home feed's posts are
+hidden; stories, search, Explore and profiles stay usable.
 
 ## Hard constraints (these decide the architecture)
 
@@ -41,15 +41,16 @@ URL-based rules come first because URLs change far less often than CSS class nam
 DOM hiding is only for leftovers that a URL can't express (sidebars, "up next").
 
 ### Instagram (`instagram.com`)
-- Allow: everything not listed below (feed, stories, search, Explore, profiles, DMs).
+- Allow: everything not listed below (stories, search, Explore, profiles, DMs).
+- Home feed: the page loads, but every post (`article`) is hidden, so only the story
+  tray shows. Not redirected, because the story tray lives there.
 - Redirect to `/`: the Reels tab (`/reels/`).
 - `/p/<id>`, `/reel/<id>`, `/reels/<id>`, `/tv/<id>` (also with a `/<user>/` prefix):
-  allowed only when clicked on a **source page** (DMs, a profile, the home feed) or
+  allowed only when clicked on a **source page** (DMs or a profile) or
   loaded from an outside link; otherwise redirect to `/`.
 - So these are blocked: anything opened from Explore, the next/previous arrows on a
   post, and swiping from one reel to the next.
-- Hide reels mixed into the home feed (`article:has(a[href*="/reel/"])`, home page only)
-  and the Reels link in the sidebar.
+- Hide the Reels link in the sidebar.
 
 ### YouTube (`youtube.com`, `m.youtube.com`)
 - Allow `/watch?v=` and `/shorts/<id>` only when opened from an external link

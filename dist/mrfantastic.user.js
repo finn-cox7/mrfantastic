@@ -42,11 +42,11 @@
     return !!m && !IG_RESERVED.has(m[1]);
   }
 
-  // Pages that may open a post or reel: DMs, profiles and the home feed.
-  // Not Explore, and not another post (that's the arrow / swipe-to-next loop).
+  // Pages that may open a post or reel: DMs and profiles.
+  // Not the home feed or Explore, and not another post (the arrow / swipe-to-next loop).
   function isSourcePage(url) {
     if (!isInstagram(url)) return false;
-    return url.pathname === '/' || url.pathname.startsWith('/direct/') || isProfilePage(url);
+    return url.pathname.startsWith('/direct/') || isProfilePage(url);
   }
 
   // Stable key for a single post or reel page, or null if the URL isn't one.
@@ -71,9 +71,10 @@
   // ctx: { initialLoad: bool, referrer: string, granted: bool }
   //   granted = the user clicked this item on a source page (tracked by nav.js)
   // returns { action: 'allow' } | { action: 'redirect', to }
-  // Only the Reels tab and post/reel pages are gated; feed, stories, search,
-  // Explore, profiles and DMs are all allowed. Post/reel pages need to be
-  // opened from a source page.
+  // Only the Reels tab and post/reel pages are gated by URL; stories, search,
+  // Explore, profiles and DMs are allowed. Post/reel pages need to be opened
+  // from a source page. The home feed's posts are hidden by instagram.js so the
+  // story tray above them stays usable.
   function classify(url, ctx) {
     if (!isInstagram(url)) return { action: 'allow' };
 
@@ -182,13 +183,14 @@
 // Entry point for instagram.com. Runs at document_start so blocked pages
 // redirect before they render.
 (function (root) {
-  // Matching on href is far more stable than IG's class names.
+  // Matching on href / tag is far more stable than IG's class names.
   // 1. The Reels tab link in the sidebar.
-  // 2. Reels mixed into the home feed: feed posts link to /p/ID, reels to /reel/ID.
-  //    Scoped to the home feed so a reel opened from a DM isn't hidden.
+  // 2. Every post in the home feed (each is an <article>). The story tray above
+  //    them isn't an article, so stories stay. Scoped to the home page so a
+  //    post opened from a DM or profile isn't hidden.
   const CSS = `
     a[href="/reels/"] { display: none !important; }
-    html[data-mf-page="home"] article:has(a[href*="/reel/"]) { display: none !important; }
+    html[data-mf-page="home"] article { display: none !important; }
   `;
 
   function injectCss() {
