@@ -17,79 +17,88 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
 })(globalThis, function () {
   const IG_HOSTS = new Set(['instagram.com', 'www.instagram.com']);
-  const IG_INBOX = '/direct/inbox/';
-
-  // First path segments that are never a feed: DMs, login, settings, legal.
-  const IG_ALWAYS_ALLOWED = new Set([
-    'direct', 'accounts', 'challenge', 'emails', 'session', 'two_factor',
-    'legal', 'privacy', 'about', 'api', 'oauth', 'web',
-  ]);
+  const IG_HOME = '/';
+  // The Reels tab, with or without a trailing slash or query string.
+  const IG_REELS_TAB = /^\/reels\/?$/;
 
   // /p/ID, /reel/ID, /reels/ID, /tv/ID, optionally prefixed by /username/
   const IG_POST = /^\/(?:[^/]+\/)?(?:p|reels?|tv)\/([^/]+)\/?$/;
-  // /stories/username/ID  (bare /stories/username/ is the tray, not gated)
-  const IG_STORY = /^\/stories\/([^/]+)\/(\d+)\/?$/;
 
   function isInstagram(url) {
     return IG_HOSTS.has(url.hostname);
   }
 
-  // Pages where clicking a link means "a friend sent me this".
-  function isMessagePage(url) {
-    return isInstagram(url) && url.pathname.startsWith('/direct/');
+  // First path segments that are Instagram pages, not usernames.
+  const IG_RESERVED = new Set([
+    'explore', 'p', 'reel', 'reels', 'tv', 'stories', 'direct', 'accounts',
+    'challenge', 'emails', 'session', 'two_factor', 'legal', 'privacy', 'about',
+    'api', 'oauth', 'web', 'notifications',
+  ]);
+  // /username/, /username/reels/, /username/tagged/, /username/saved/
+  const IG_PROFILE = /^\/([^/]+)\/(?:(?:reels|tagged|saved)\/)?$/;
+
+  function isProfilePage(url) {
+    const m = url.pathname.match(IG_PROFILE);
+    return !!m && !IG_RESERVED.has(m[1]);
   }
 
-  // Stable key for a single piece of content, or null if the URL isn't one.
+  // Pages that may open a post or reel: DMs, profiles and the home feed.
+  // Not Explore, and not another post (that's the arrow / swipe-to-next loop).
+  function isSourcePage(url) {
+    if (!isInstagram(url)) return false;
+    return url.pathname === '/' || url.pathname.startsWith('/direct/') || isProfilePage(url);
+  }
+
+  // Stable key for a single post or reel page, or null if the URL isn't one.
   // Keyed by id only, because IG rewrites /p/ID to /reel/ID and adds a /username/ prefix.
   function contentKey(url) {
     if (!isInstagram(url)) return null;
-    let m = url.pathname.match(IG_POST);
-    if (m) return 'ig:post:' + m[1];
-    m = url.pathname.match(IG_STORY);
-    if (m) return 'ig:story:' + m[2];
-    return null;
+    const m = url.pathname.match(IG_POST);
+    return m ? 'ig:post:' + m[1] : null;
   }
 
-  // A full page load counts as "opened from a link" unless it came from
-  // elsewhere on Instagram (e.g. cmd-clicking a "more posts" grid).
+  // A full page load counts as "opened from a link" if it came from outside
+  // Instagram or from a source page (e.g. cmd-clicking a profile grid), but not
+  // from Explore or another post.
   function referrerIsTrusted(referrer) {
     if (!referrer) return true;
     let ref;
     try { ref = new URL(referrer); } catch { return true; }
     if (!isInstagram(ref)) return true;
-    return isMessagePage(ref);
+    return isSourcePage(ref);
   }
 
   // ctx: { initialLoad: bool, referrer: string, granted: bool }
-  //   granted = the user clicked this item in a DM (tracked by nav.js)
+  //   granted = the user clicked this item on a source page (tracked by nav.js)
   // returns { action: 'allow' } | { action: 'redirect', to }
+  // Only the Reels tab and post/reel pages are gated; feed, stories, search,
+  // Explore, profiles and DMs are all allowed. Post/reel pages need to be
+  // opened from a source page.
   function classify(url, ctx) {
     if (!isInstagram(url)) return { action: 'allow' };
 
-    const first = url.pathname.split('/')[1] || '';
-    if (IG_ALWAYS_ALLOWED.has(first)) return { action: 'allow' };
+    if (IG_REELS_TAB.test(url.pathname)) return { action: 'redirect', to: IG_HOME };
 
     if (contentKey(url)) {
       if (ctx.granted) return { action: 'allow' };
       if (ctx.initialLoad && referrerIsTrusted(ctx.referrer)) return { action: 'allow' };
-      return { action: 'redirect', to: IG_INBOX };
+      return { action: 'redirect', to: IG_HOME };
     }
 
-    // Home feed, Explore, Reels tab, story tray, profiles, everything else.
-    return { action: 'redirect', to: IG_INBOX };
+    return { action: 'allow' };
   }
 
-  return { classify, contentKey, isMessagePage, referrerIsTrusted, IG_INBOX };
+  return { classify, contentKey, isSourcePage, referrerIsTrusted, IG_HOME };
 });
 
 // --- src/nav.js ---
-// Tracks SPA navigation and "opened from a DM" grants, then enforces rules.classify.
+// Tracks SPA navigation and "opened from a source page" grants, then enforces rules.classify.
 // State lives in sessionStorage, so it is per-tab and dies with the tab.
 (function (root) {
   const { rules } = root.MF;
-  const GRANT_KEY = 'mf:grant';     // { key, at } written on a click inside DMs
+  const GRANT_KEY = 'mf:grant';     // { key, at } written on a click on a source page
   const ALLOWED_KEY = 'mf:allowed'; // key of the content currently being viewed
-  const GRANT_WINDOW_MS = 3000;     // for DM cards that aren't plain <a href> links
+  const GRANT_WINDOW_MS = 3000;     // for DM cards etc. that aren't plain <a href> links
   const POLL_MS = 200;
 
   function read(k) {
@@ -118,15 +127,25 @@
   }
 
   function onClick(e) {
-    if (!rules.isMessagePage(new URL(location.href))) return;
+    if (!rules.isSourcePage(new URL(location.href))) return;
     const a = e.target.closest && e.target.closest('a[href]');
-    const key = a ? rules.contentKey(new URL(a.href, location.href)) : null;
-    write(GRANT_KEY, { key, at: Date.now() });
+    if (!a) {
+      // Not a link (e.g. a DM card): unlock whatever opens in the next few seconds.
+      write(GRANT_KEY, { key: null, at: Date.now() });
+      return;
+    }
+    // A link: unlock only that post or reel. A link elsewhere (Explore, a profile)
+    // clears any grant so it can't be carried onto the next page.
+    const key = rules.contentKey(new URL(a.href, location.href));
+    if (key) write(GRANT_KEY, { key, at: Date.now() });
+    else remove(GRANT_KEY);
   }
 
   function enforce(initialLoad) {
     const url = new URL(location.href);
     const key = rules.contentKey(url);
+    // Landing on Explore (or anywhere that isn't a source) drops an unused grant.
+    if (!key && !rules.isSourcePage(url)) remove(GRANT_KEY);
     const granted = key ? consumeGrant(key) : false;
     const verdict = rules.classify(url, {
       initialLoad,
@@ -161,11 +180,15 @@
 
 // --- src/instagram.js ---
 // Entry point for instagram.com. Runs at document_start so blocked pages
-// redirect before the feed renders.
+// redirect before they render.
 (function (root) {
-  // Hide nav links to the feeds. Matching on href is far more stable than IG's class names.
+  // Matching on href is far more stable than IG's class names.
+  // 1. The Reels tab link in the sidebar.
+  // 2. Reels mixed into the home feed: feed posts link to /p/ID, reels to /reel/ID.
+  //    Scoped to the home feed so a reel opened from a DM isn't hidden.
   const CSS = `
-    a[href="/"], a[href="/explore/"], a[href="/reels/"] { display: none !important; }
+    a[href="/reels/"] { display: none !important; }
+    html[data-mf-page="home"] article:has(a[href*="/reel/"]) { display: none !important; }
   `;
 
   function injectCss() {
@@ -174,6 +197,15 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
+  function markPage() {
+    const page = location.pathname === '/' ? 'home' : '';
+    if (document.documentElement.dataset.mfPage !== page) {
+      document.documentElement.dataset.mfPage = page;
+    }
+  }
+
   injectCss();
+  markPage();
+  setInterval(markPage, 200);
   root.MF.nav.start();
 })(globalThis);

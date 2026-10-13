@@ -6,9 +6,11 @@ Block feed-scrolling on Instagram, YouTube and Snapchat on both laptop and phone
 while still letting me open the individual posts, reels, stories and videos that
 friends send me.
 
-**Core rule:** content is allowed only if I reached it *from a message* (a DM or an
-external link). Anything the platform pushes at me — home feed, Explore, Reels tab,
-Shorts, Spotlight, recommendations, autoplay-next, swipe-to-next — is blocked.
+**Core rule:** short-video content (Reels, Shorts, Spotlight) and single post/reel pages
+are allowed only if I reached them from a *source*: a DM, an external link, and on
+Instagram also a profile or the home feed. Never from Explore or from another post.
+Swipe-to-next and autoplay-next are blocked. On Instagram the regular feed, stories,
+search, Explore and profiles stay usable (changed after first real test).
 
 ## Hard constraints (these decide the architecture)
 
@@ -39,11 +41,15 @@ URL-based rules come first because URLs change far less often than CSS class nam
 DOM hiding is only for leftovers that a URL can't express (sidebars, "up next").
 
 ### Instagram (`instagram.com`)
-- Allow: `/direct/*` (DMs).
-- Allow only when opened from a DM: `/p/<id>`, `/reel/<id>`, `/stories/<user>/<id>`.
-- Redirect to `/direct/inbox/`: `/` (feed), `/explore/*`, `/reels/*`, a profile grid
-  (`/<user>/`), and story tray auto-advance into a story nobody sent me.
-- Block navigating from one reel to another that wasn't sent (that's the scroll loop).
+- Allow: everything not listed below (feed, stories, search, Explore, profiles, DMs).
+- Redirect to `/`: the Reels tab (`/reels/`).
+- `/p/<id>`, `/reel/<id>`, `/reels/<id>`, `/tv/<id>` (also with a `/<user>/` prefix):
+  allowed only when clicked on a **source page** (DMs, a profile, the home feed) or
+  loaded from an outside link; otherwise redirect to `/`.
+- So these are blocked: anything opened from Explore, the next/previous arrows on a
+  post, and swiping from one reel to the next.
+- Hide reels mixed into the home feed (`article:has(a[href*="/reel/"])`, home page only)
+  and the Reels link in the sidebar.
 
 ### YouTube (`youtube.com`, `m.youtube.com`)
 - Allow `/watch?v=` and `/shorts/<id>` only when opened from an external link
@@ -71,15 +77,16 @@ scripts/build-userscript.js bundles src/ into dist/mrfantastic.user.js for Safar
 tests/rules.test.js         node:test, one case per URL rule (npm test)
 ```
 
-### How "opened from a DM" works
-1. On `/direct/*`, `nav.js` listens for link clicks and records the target URL in
-   `sessionStorage` as an allow-token.
+### How "opened from a source page" works
+1. On a source page, `nav.js` listens for link clicks and records the target post id in
+   `sessionStorage` as an allow-token. A click on any other link clears the token.
 2. On any gated URL, the content script checks for a matching token. No token → redirect.
 3. The token is single-use, so swiping to the next reel produces a URL without a token,
    and that gets blocked.
 4. SPA route changes are caught by polling `location.href` every 200ms plus `popstate`.
    (Content scripts run in an isolated world, so wrapping the page's `history.pushState` won't work.)
-5. A DM card that isn't a plain `<a href>` gives a 3-second grant for the next item opened.
+5. A click on a source page that isn't on a link (e.g. a DM card) gives a 3-second grant
+   for the next item opened. Landing on a non-source page (Explore) drops it.
 6. A full page load of a post is allowed (it came from a link, e.g. iMessage) unless the
    referrer is a non-DM Instagram page, which is what cmd-click from a grid would produce.
 
