@@ -92,11 +92,56 @@
   return { classify, contentKey, isSourcePage, referrerIsTrusted, IG_HOME };
 });
 
+// --- src/debug.js ---
+// Temporary on-screen badge: proves the script is running and shows the path it
+// sees, its last verdict and any error. Remove once the phone setup is confirmed.
+// Styled through element.style (CSSOM), which page CSP doesn't block.
+(function (root) {
+  const ENABLED = true;
+  let el = null;
+  const state = { path: '', verdict: 'start', error: '' };
+
+  function render() {
+    if (!ENABLED) return;
+    if (!el) {
+      const parent = document.body || document.documentElement;
+      if (!parent) return;
+      el = document.createElement('div');
+      const s = el.style;
+      s.setProperty('position', 'fixed');
+      s.setProperty('top', '4px');
+      s.setProperty('left', '4px');
+      s.setProperty('z-index', '2147483647');
+      s.setProperty('background', '#c00');
+      s.setProperty('color', '#fff');
+      s.setProperty('font', '11px/1.3 -apple-system, sans-serif');
+      s.setProperty('padding', '2px 6px');
+      s.setProperty('border-radius', '4px');
+      s.setProperty('pointer-events', 'none');
+      s.setProperty('max-width', '90vw');
+      parent.appendChild(el);
+    }
+    if (!el.isConnected) (document.body || document.documentElement).appendChild(el);
+    el.textContent = `mf ${state.path} → ${state.verdict}${state.error ? ' ERR ' + state.error : ''}`;
+  }
+
+  function set(patch) {
+    Object.assign(state, patch);
+    render();
+  }
+
+  addEventListener('error', (e) => set({ error: String(e.message || e) }));
+  setInterval(() => set({ path: location.pathname }), 500);
+
+  root.MF = Object.assign(root.MF || {}, { debug: { set } });
+})(globalThis);
+
 // --- src/nav.js ---
 // Tracks SPA navigation and "opened from a source page" grants, then enforces rules.classify.
 // State lives in sessionStorage, so it is per-tab and dies with the tab.
 (function (root) {
   const { rules } = root.MF;
+  const debug = root.MF.debug || { set() {} };
   const GRANT_KEY = 'mf:grant';     // { key, at } written on a click on a source page
   const ALLOWED_KEY = 'mf:allowed'; // key of the content currently being viewed
   const GRANT_WINDOW_MS = 3000;     // for DM cards etc. that aren't plain <a href> links
@@ -153,6 +198,7 @@
       referrer: document.referrer,
       granted,
     });
+    debug.set({ path: url.pathname, verdict: verdict.action + (granted ? ' (granted)' : '') });
     if (verdict.action === 'redirect') {
       document.querySelectorAll('video, audio').forEach((m) => m.pause());
       location.replace(verdict.to);
@@ -169,7 +215,7 @@
     const check = () => {
       if (location.href === last) return;
       last = location.href;
-      enforce(false);
+      try { enforce(false); } catch (e) { debug.set({ error: String(e) }); }
     };
     setInterval(check, POLL_MS);
     addEventListener('popstate', check);
@@ -189,11 +235,18 @@
   //    them isn't an article, so stories stay. Scoped to the home page so a
   //    post opened from a DM or profile isn't hidden.
   const CSS = `
-    a[href="/reels/"] { display: none !important; }
+    a[href^="/reels/"] { display: none !important; }
     html[data-mf-page="home"] article { display: none !important; }
   `;
 
+  // Two routes, because Safari can apply the page's CSP to a <style> element a
+  // content script inserts. A constructed stylesheet isn't subject to that.
   function injectCss() {
+    try {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(CSS);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    } catch {}
     const style = document.createElement('style');
     style.textContent = CSS;
     (document.head || document.documentElement).appendChild(style);
@@ -206,8 +259,13 @@
     }
   }
 
-  injectCss();
-  markPage();
-  setInterval(markPage, 200);
-  root.MF.nav.start();
+  const debug = root.MF.debug || { set() {} };
+  try {
+    injectCss();
+    markPage();
+    setInterval(markPage, 200);
+    root.MF.nav.start();
+  } catch (e) {
+    debug.set({ error: String(e) });
+  }
 })(globalThis);

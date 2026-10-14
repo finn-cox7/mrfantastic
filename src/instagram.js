@@ -7,11 +7,18 @@
   //    them isn't an article, so stories stay. Scoped to the home page so a
   //    post opened from a DM or profile isn't hidden.
   const CSS = `
-    a[href="/reels/"] { display: none !important; }
+    a[href^="/reels/"] { display: none !important; }
     html[data-mf-page="home"] article { display: none !important; }
   `;
 
+  // Two routes, because Safari can apply the page's CSP to a <style> element a
+  // content script inserts. A constructed stylesheet isn't subject to that.
   function injectCss() {
+    try {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(CSS);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+    } catch {}
     const style = document.createElement('style');
     style.textContent = CSS;
     (document.head || document.documentElement).appendChild(style);
@@ -24,8 +31,13 @@
     }
   }
 
-  injectCss();
-  markPage();
-  setInterval(markPage, 200);
-  root.MF.nav.start();
+  const debug = root.MF.debug || { set() {} };
+  try {
+    injectCss();
+    markPage();
+    setInterval(markPage, 200);
+    root.MF.nav.start();
+  } catch (e) {
+    debug.set({ error: String(e) });
+  }
 })(globalThis);

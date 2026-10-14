@@ -2,6 +2,7 @@
 // State lives in sessionStorage, so it is per-tab and dies with the tab.
 (function (root) {
   const { rules } = root.MF;
+  const debug = root.MF.debug || { set() {} };
   const GRANT_KEY = 'mf:grant';     // { key, at } written on a click on a source page
   const ALLOWED_KEY = 'mf:allowed'; // key of the content currently being viewed
   const GRANT_WINDOW_MS = 3000;     // for DM cards etc. that aren't plain <a href> links
@@ -58,6 +59,7 @@
       referrer: document.referrer,
       granted,
     });
+    debug.set({ path: url.pathname, verdict: verdict.action + (granted ? ' (granted)' : '') });
     if (verdict.action === 'redirect') {
       document.querySelectorAll('video, audio').forEach((m) => m.pause());
       location.replace(verdict.to);
@@ -74,7 +76,7 @@
     const check = () => {
       if (location.href === last) return;
       last = location.href;
-      enforce(false);
+      try { enforce(false); } catch (e) { debug.set({ error: String(e) }); }
     };
     setInterval(check, POLL_MS);
     addEventListener('popstate', check);

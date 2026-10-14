@@ -6,7 +6,7 @@
   "content_scripts": [
     {
       "matches": ["https://www.instagram.com/*", "https://instagram.com/*"],
-      "js": ["src/rules.js", "src/nav.js", "src/instagram.js"],
+      "js": ["src/rules.js", "src/debug.js", "src/nav.js", "src/instagram.js"],
       "run_at": "document_start"
     }
   ],
