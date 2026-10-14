@@ -259,8 +259,20 @@
     }
   }
 
+  // Safari's "Open in the Instagram app" banner comes from this meta tag. Safari
+  // reads it while parsing <head>, so remove it the moment it's inserted.
+  function removeAppBanner() {
+    const SELECTOR = 'meta[name="apple-itunes-app"]';
+    const strip = () => document.querySelectorAll(SELECTOR).forEach((m) => m.remove());
+    strip();
+    const observer = new MutationObserver(strip);
+    observer.observe(document.documentElement, { childList: true, subtree: true });
+    addEventListener('DOMContentLoaded', () => { strip(); observer.disconnect(); });
+  }
+
   const debug = root.MF.debug || { set() {} };
   try {
+    removeAppBanner();
     injectCss();
     markPage();
     setInterval(markPage, 200);
