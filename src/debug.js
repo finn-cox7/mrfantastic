@@ -1,8 +1,8 @@
-// Temporary on-screen badge: proves the script is running and shows the path it
-// sees, its last verdict and any error. Remove once the phone setup is confirmed.
+// On-screen debug badge: proves the script is running and shows the path it
+// sees, its last verdict and any error. Flip ENABLED to true when debugging.
 // Styled through element.style (CSSOM), which page CSP doesn't block.
 (function (root) {
-  const ENABLED = true;
+  const ENABLED = false;
   let el = null;
   const state = { path: '', verdict: 'start', error: '' };
 

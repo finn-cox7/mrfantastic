@@ -93,7 +93,9 @@ tests/rules.test.js         node:test, one case per URL rule (npm test)
 
 ## Milestones
 
-Status: **M1 built and unit-tested; not yet checked against live instagram.com.**
+Status: **M1 working on iPhone Safari (Reels blocked, confirmed Oct 14).** Feed hiding
+not yet confirmed on the phone. Safari's "Open in app" banner can't be removed: Safari
+reads its meta tag before userscripts run.
 
 | # | Deliverable | Done when |
 |---|---|---|
